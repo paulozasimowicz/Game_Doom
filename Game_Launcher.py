@@ -4,7 +4,14 @@ import os
 import random
 import time
 import sys
-from src.ui.ui_manager import UIManager  # Add this import
+from src.ui.ui_manager import UIManager
+from src.entities.monster import Monster
+from src.entities.monster_manager import MonsterManager
+from src.entities.health_heart import HealthHeart
+from src.entities.map_manager import MapManager
+from src.game.game_state import GameState, GameStateManager
+from src.game.special_areas import SpecialAreaManager, SpecialAreaType
+from src.utils.constants import *
 
 # Set SDL to use the macOS Cocoa video driver before any pygame initialization
 os.environ['SDL_VIDEODRIVER'] = 'cocoa'
@@ -74,14 +81,6 @@ MAX_LEVEL = 5
 level_completed = False
 level_start_time = time.time()
 LEVEL_TIME_LIMIT = 300  # 5 minutes per level
-
-# Special areas in the maze
-SPECIAL_AREAS = {
-    'treasure': 2,  # Treasure room with extra health
-    'trap': 3,      # Trap room with more monsters
-    'boss': 4,      # Boss room
-    'exit': 5       # Level exit
-}
 
 # Complex maze variations
 MAPS = [
@@ -179,51 +178,8 @@ MAP = MAPS[0]  # Start with level 1 map
 def get_level_map(level):
     return MAPS[level - 1]  # Level 1 uses index 0
 
-# Function to check special areas
-def check_special_area(x, y):
-    map_x = int(x / CELL_SIZE)
-    map_y = int(y / CELL_SIZE)
-    if 0 <= map_x < len(MAP) and 0 <= map_y < len(MAP[0]):
-        cell_value = MAP[map_x][map_y]
-        if cell_value in SPECIAL_AREAS.values():
-            return cell_value
-    return 0
-
-# Function to handle special area effects
-def handle_special_area(x, y):
-    area_type = check_special_area(x, y)
-    if area_type == SPECIAL_AREAS['treasure']:
-        global player_health
-        player_health = min(5, player_health + 1)  # Restore 1 health
-    elif area_type == SPECIAL_AREAS['trap']:
-        global monsters
-        # Spawn extra monsters in trap room
-        for _ in range(3):
-            monsters.append(Monster(x + random.randint(-CELL_SIZE, CELL_SIZE),
-                                  y + random.randint(-CELL_SIZE, CELL_SIZE)))
-    elif area_type == SPECIAL_AREAS['boss']:
-        # Spawn boss monster
-        monsters.append(Monster(x, y, is_boss=True))
-    elif area_type == SPECIAL_AREAS['exit']:
-        global level_completed, current_level
-        if current_level < MAX_LEVEL:
-            level_completed = True
-            current_level += 1
-            reset_level()
-
-# Function to reset level
-def reset_level():
-    global MAP, player_x, player_y, player_angle, monsters, health_hearts, last_spawn_time, last_heart_spawn_time, level_start_time, level_completed
-    MAP = get_level_map(current_level)
-    player_x = CELL_SIZE * 1.5
-    player_y = CELL_SIZE * 1.5
-    player_angle = 0
-    monsters = []
-    health_hearts = []
-    last_spawn_time = time.time()
-    last_heart_spawn_time = time.time()
-    level_start_time = time.time()
-    level_completed = False
+# Initialize special areas manager
+special_areas_manager = None
 
 # Wall texture patterns
 WALL_TEXTURES = [
@@ -261,122 +217,11 @@ COLORS = [
     [(255, 0, 0), (255, 0, 0), (255, 0, 0), (255, 0, 0), (255, 0, 0), (255, 0, 0), (255, 0, 0), (255, 0, 0)]
 ]
 
-# Game state
-class GameState:
-    RUNNING = 0
-    PAUSED = 1
-    GAME_OVER = 2
-    TITLE = 3  # New state for title screen
-    UPGRADE = 4  # New state for upgrade menu
+# Initialize game state manager
+game_state = GameStateManager()
 
-# Monster settings
-class Monster:
-    def __init__(self, x, y, is_boss=False):
-        self.x = x
-        self.y = y
-        self.health = 9 if is_boss else 3  # Boss has triple health
-        self.size = CELL_SIZE if is_boss else CELL_SIZE // 2  # Boss is bigger
-        self.color = (200, 0, 0) if is_boss else (150, 0, 0)  # Boss is darker red
-        self.is_hit = False
-        self.hit_timer = 0
-        self.speed = 1.0 if is_boss else 1.5  # Boss is slower
-        self.damage = 3 if is_boss else 1  # Boss deals triple damage
-        self.last_attack_time = 0
-        self.attack_cooldown = 1.0
-        self.animation_time = 0
-        self.animation_speed = 0.1
-        self.visible = True
-        self.images = []
-        self.current_frame = 0
-        self.is_boss = is_boss
-        self.exp_value = EXP_PER_MONSTER['boss'] if is_boss else EXP_PER_MONSTER['normal']
-        self.load_images()
-
-    def load_images(self):
-        try:
-            # Create Images folder if it doesn't exist
-            if not os.path.exists('Images'):
-                os.makedirs('Images')
-                print("Created Images folder. Please add monster animation images.")
-            
-            # Try to load 8 frames first
-            frame_count = 8
-            while frame_count > 0:
-                image_path = os.path.join('Images', f'slime{frame_count}.png')
-                if os.path.exists(image_path):
-                    break
-                frame_count -= 1
-            
-            if frame_count == 0:
-                print("No monster images found. Using fallback monster graphics.")
-                return
-            
-            # Load all available frames
-            for i in range(1, frame_count + 1):
-                image_path = os.path.join('Images', f'slime{i}.png')
-                if os.path.exists(image_path):
-                    image = pygame.image.load(image_path)
-                    image = image.convert_alpha()
-                    image = pygame.transform.scale(image, (self.size, self.size))
-                    self.images.append(image)
-            
-            print(f"Loaded {len(self.images)} monster animation frames from Images folder")
-            
-        except Exception as e:
-            print(f"Error loading monster images: {e}")
-            self.images = []
-
-    def draw(self, screen, x, y, size):
-        if not self.visible:
-            return
-            
-        # Update animation
-        self.animation_time += self.animation_speed
-        if self.animation_time >= 0.2 and self.images:
-            self.animation_time = 0
-            self.current_frame = (self.current_frame + 1) % len(self.images)
-        
-        if self.images:
-            # Draw the current animation frame
-            scaled_size = int(size)
-            scaled_image = pygame.transform.scale(self.images[self.current_frame], 
-                                               (scaled_size, scaled_size))
-            
-            # Apply hit effect
-            if self.is_hit:
-                hit_surface = pygame.Surface(scaled_image.get_size(), pygame.SRCALPHA)
-                hit_surface.fill((255, 0, 0, 128))
-                scaled_image.blit(hit_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-            
-            # Draw the image
-            screen.blit(scaled_image, (x - scaled_size//2, y - scaled_size//2))
-        else:
-            # Fallback to drawn monster
-            color = (255, 100, 100) if self.is_hit else self.color
-            pygame.draw.circle(screen, color, (int(x), int(y)), int(size))
-            
-            # Draw eyes
-            eye_color = (255, 0, 0) if self.is_hit else (255, 200, 0)
-            left_eye = (x - size/3, y - size/4)
-            right_eye = (x + size/3, y - size/4)
-            
-            for eye_pos in [left_eye, right_eye]:
-                pygame.draw.circle(screen, eye_color, 
-                                 (int(eye_pos[0]), int(eye_pos[1])), 
-                                 int(size/4))
-                pygame.draw.circle(screen, (0, 0, 0), 
-                                 (int(eye_pos[0]), int(eye_pos[1])), 
-                                 int(size/8))
-        
-        # Draw health bar
-        health_width = size * (self.health / (9 if self.is_boss else 3))
-        health_height = 5
-        health_y = y + size + 5
-        
-        pygame.draw.rect(screen, (100, 0, 0),
-                        (x - size/2, health_y, size, health_height))
-        pygame.draw.rect(screen, (0, 255, 0),
-                        (x - size/2, health_y, health_width, health_height))
+# Initialize map manager
+map_manager = MapManager()
 
 # Health heart settings
 class HealthHeart:
@@ -497,7 +342,7 @@ def level_up():
 # Function to show upgrade menu
 def show_upgrade_menu():
     global game_state
-    game_state = GameState.UPGRADE
+    game_state.change_state(GameState.UPGRADE)
     pygame.mouse.set_visible(True)
     pygame.event.set_grab(False)
 
@@ -588,7 +433,7 @@ def handle_upgrade(key):
         SPECIAL_ABILITIES['explosive_shot'] = True
         upgrade_points -= 3
     elif key == pygame.K_RETURN:  # Continue
-        game_state = GameState.RUNNING
+        game_state.change_state(GameState.RUNNING)
         pygame.mouse.set_visible(False)
         pygame.event.set_grab(True)
 
@@ -633,7 +478,7 @@ def spawn_monsters():
     current_time = time.time()
     
     # Determine spawn interval based on game state
-    spawn_interval = SPAWN_INTERVAL / 5 if game_state == GameState.PAUSED else SPAWN_INTERVAL
+    spawn_interval = SPAWN_INTERVAL / 5 if game_state.current_state == GameState.PAUSED else SPAWN_INTERVAL
     
     # Regular monster spawn
     if current_time - last_spawn_time >= spawn_interval:
@@ -1255,7 +1100,7 @@ def draw_title_screen():
         screen.blit(control_text, control_rect)
 
 def initialize_game():
-    global screen, clock, player_health, player_x, player_y, player_angle, monsters, health_hearts, last_spawn_time, last_heart_spawn_time, kill_count, game_state
+    global screen, clock, player_health, player_x, player_y, player_angle, game_state, special_areas_manager, map_manager
     
     try:
         # Initialize game variables
@@ -1264,34 +1109,52 @@ def initialize_game():
         player_x = CELL_SIZE * 1.5
         player_y = CELL_SIZE * 1.5
         player_angle = 0
-        monsters = []
-        health_hearts = []
-        last_spawn_time = time.time()
-        last_heart_spawn_time = time.time()
-        kill_count = 0
-        game_state = GameState.RUNNING
+        game_state.change_state(GameState.RUNNING)
         
-        # Initial monster spawn
-        spawn_monsters()
+        # Reset map manager
+        map_manager.reset_level()
+        
+        # Create player state dictionary
+        player_state = {
+            'x': player_x,
+            'y': player_y,
+            'health': player_health,
+            'angle': player_angle
+        }
+        
+        # Initialize special areas manager after player is created
+        special_areas_manager = SpecialAreaManager(MAP, player_state)
         
         return True
     except Exception as e:
         print(f"Error initializing game: {e}")
         return False
 
+def handle_special_area(x, y):
+    global player_health, current_level, MAX_LEVEL, monsters
+    if special_areas_manager:
+        result = special_areas_manager.handle_special_area(x, y, monsters, current_level, MAX_LEVEL)
+        if result:
+            # Update player health from the player state
+            player_health = special_areas_manager.player_state['health']
+            return True
+    return False
+
 def draw_level_info():
+    level_info = map_manager.get_level_info()
     font = pygame.font.Font(None, 36)
-    level_text = font.render(f'Level: {player_level} ({player_exp}/{exp_to_next_level} EXP)', True, (255, 255, 255))
-    time_left = max(0, LEVEL_TIME_LIMIT - (time.time() - level_start_time))
-    time_text = font.render(f'Time: {int(time_left)}', True, (255, 255, 255))
-    screen.blit(level_text, (20, 60))
-    screen.blit(time_text, (20, 100))
+    level_text = font.render(f"Level: {level_info['level']}", True, (255, 255, 255))
+    time_text = font.render(f"Time: {int(level_info['time_remaining'])}", True, (255, 255, 255))
+    kills_text = font.render(f"Kills: {level_info['kills']}", True, (255, 255, 255))
+    screen.blit(level_text, (10, 10))
+    screen.blit(time_text, (10, 50))
+    screen.blit(kills_text, (10, 90))
 
 # After the MAP initialization, add:
 ui_manager = UIManager(MAP)
 
 def main():
-    global game_state, current_level, level_completed, player_health, player_speed, ability_cooldowns
+    global game_state, player_health, player_speed, ability_cooldowns
     
     if not initialize_game():
         print("Failed to initialize game. Exiting...")
@@ -1299,7 +1162,7 @@ def main():
         sys.exit(1)
     
     running = True
-    game_state = GameState.TITLE
+    game_state.change_state(GameState.TITLE)
     last_health_regen = time.time()
     slow_time_active = False
     slow_time_end = 0
@@ -1328,7 +1191,7 @@ def main():
                 running = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    if game_state == GameState.TITLE:
+                    if game_state.current_state == GameState.TITLE:
                         running = False
                     else:
                         pygame.mouse.set_visible(True)
@@ -1340,23 +1203,23 @@ def main():
                         pygame.display.set_mode((1024, 720))
                     else:
                         pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
-                elif event.key == pygame.K_r and game_state == GameState.GAME_OVER:
+                elif event.key == pygame.K_r and game_state.current_state == GameState.GAME_OVER:
                     reset_game()
-                    game_state = GameState.RUNNING
+                    game_state.change_state(GameState.RUNNING)
                 elif event.key == pygame.K_p:
-                    if game_state == GameState.RUNNING:
-                        game_state = GameState.PAUSED
+                    if game_state.current_state == GameState.RUNNING:
+                        game_state.change_state(GameState.PAUSED)
                         pygame.mouse.set_visible(True)
                         pygame.event.set_grab(False)
-                    elif game_state == GameState.PAUSED:
-                        game_state = GameState.RUNNING
+                    elif game_state.current_state == GameState.PAUSED:
+                        game_state.change_state(GameState.RUNNING)
                         pygame.mouse.set_visible(False)
                         pygame.event.set_grab(True)
-                elif game_state == GameState.TITLE:
-                    game_state = GameState.RUNNING
+                elif game_state.current_state == GameState.TITLE:
+                    game_state.change_state(GameState.RUNNING)
                     pygame.mouse.set_visible(False)
                     pygame.event.set_grab(True)
-                elif game_state == GameState.UPGRADE:
+                elif game_state.current_state == GameState.UPGRADE:
                     handle_upgrade(event.key)
         
         # Apply slow time effect
@@ -1366,19 +1229,27 @@ def main():
         # Rest of the game loop...
         screen.fill((0, 0, 0))
         
-        if game_state == GameState.TITLE:
+        if game_state.current_state == GameState.TITLE:
             draw_title_screen()
-        elif game_state == GameState.RUNNING:
+        elif game_state.current_state == GameState.RUNNING:
             handle_input()
-            spawn_monsters()
-            spawn_health_heart()
-            update_monsters()
-            update_health_hearts()
             
-            if player_health <= 0:
-                game_state = GameState.GAME_OVER
-                pygame.mouse.set_visible(True)
-                pygame.event.set_grab(False)
+            # Update map manager
+            player_state = {
+                'x': player_x,
+                'y': player_y,
+                'health': player_health,
+                'angle': player_angle
+            }
+            
+            # Update game state through map manager
+            if not map_manager.update(1/60, player_state):
+                game_state.change_state(GameState.GAME_OVER)
+            
+            # Check for level completion
+            if map_manager.level_completed:
+                if not map_manager.next_level():
+                    game_state.change_state(GameState.GAME_OVER)
             
             cast_rays()
             draw_exit_indicator()
@@ -1388,16 +1259,12 @@ def main():
             draw_blood_overlay()
             draw_level_info()
             
-            # Check for level completion
-            if level_completed:
-                reset_level()
-            
             # Check for time limit
-            if time.time() - level_start_time > LEVEL_TIME_LIMIT:
-                game_state = GameState.GAME_OVER
+            if time.time() - map_manager.level_start_time > LEVEL_TIME_LIMIT:
+                game_state.change_state(GameState.GAME_OVER)
                 pygame.mouse.set_visible(True)
                 pygame.event.set_grab(False)
-        elif game_state == GameState.PAUSED:
+        elif game_state.current_state == GameState.PAUSED:
             cast_rays()
             draw_weapon(is_shooting, shoot_frame)
             draw_player_health()
@@ -1405,7 +1272,7 @@ def main():
             draw_blood_overlay()
             draw_level_info()
             draw_pause_screen()
-        elif game_state == GameState.GAME_OVER:
+        elif game_state.current_state == GameState.GAME_OVER:
             cast_rays()
             draw_weapon(is_shooting, shoot_frame)
             draw_player_health()
@@ -1413,17 +1280,17 @@ def main():
             draw_blood_overlay()
             draw_level_info()
             draw_game_over()
-        elif game_state == GameState.UPGRADE:
+        elif game_state.current_state == GameState.UPGRADE:
             draw_upgrade_menu()
         
         # Update UI
         ui_manager.update({
-            'level': current_level,
+            'level': map_manager.current_level,
             'health': player_health,
             'kill_count': kill_count,
             'position': (player_x, player_y),
             'angle': player_angle
-        }, monsters)
+        }, map_manager.monster_manager.monsters if map_manager.monster_manager else [])
         
         # Draw UI
         ui_manager.draw(screen)

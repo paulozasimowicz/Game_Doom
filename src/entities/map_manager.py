@@ -1,36 +1,43 @@
 import pygame
 import time
 import random
-import math
 from src.utils.constants import *
-from src.entities.monster import Monster
+from src.entities.monster_manager import MonsterManager
 from src.entities.heart_manager import HeartManager
 
 class MapManager:
     def __init__(self):
         self.current_level = 1
         self.current_map = MAPS[0]
-        self.monsters = []
+        self.monster_manager = None
         self.heart_manager = None
-        self.last_spawn_time = time.time()
-        self.last_wave_time = time.time()
-        self.boss_spawned = False
         self.level_start_time = time.time()
         self.level_completed = False
         self.visited_cells = set()
+        self.level_time_limit = LEVEL_TIME_LIMIT
+        self.kill_count = 0
+        self.player_health = 10
+        self.last_hit_time = 0
+        self.invulnerability_time = INVULNERABILITY_TIME
 
     def reset_level(self):
         """Reset the current level state"""
         self.current_map = MAPS[self.current_level - 1]
-        self.monsters.clear()
-        self.heart_manager = HeartManager(self.current_map)
-        self.heart_manager.spawn_hearts()
-        self.last_spawn_time = time.time()
-        self.last_wave_time = time.time()
-        self.boss_spawned = False
         self.level_start_time = time.time()
         self.level_completed = False
         self.visited_cells.clear()
+        self.kill_count = 0
+        
+        # Initialize or reset managers
+        if self.monster_manager:
+            self.monster_manager.reset()
+        else:
+            self.monster_manager = MonsterManager(self.current_map)
+            
+        if self.heart_manager:
+            self.heart_manager.reset()
+        else:
+            self.heart_manager = HeartManager(self.current_map)
 
     def next_level(self):
         """Advance to the next level"""
@@ -46,146 +53,30 @@ class MapManager:
         cell_y = int(player_y / CELL_SIZE)
         self.visited_cells.add((cell_x, cell_y))
 
-    def spawn_monsters(self, player_x, player_y):
-        """Spawn monsters according to level limits and timing"""
-        current_time = time.time()
-        
-        # Check if we've reached the monster limit for this level
-        if len(self.monsters) >= MAX_MONSTERS_PER_LEVEL[self.current_level]:
-            return
-
-        # Regular monster spawn
-        if current_time - self.last_spawn_time >= SPAWN_INTERVAL:
-            self._try_spawn_monster(player_x, player_y)
-            self.last_spawn_time = current_time
-
-        # Wave spawn
-        if current_time - self.last_wave_time >= WAVE_INTERVAL:
-            self._spawn_wave(player_x, player_y)
-            self.last_wave_time = current_time
-
-    def _try_spawn_monster(self, player_x, player_y):
-        """Attempt to spawn a single monster"""
-        for _ in range(MAX_SPAWN_ATTEMPTS):
-            # Get random position
-            cell_x = random.randint(1, len(self.current_map[0]) - 2)
-            cell_y = random.randint(1, len(self.current_map) - 2)
-            
-            if self.current_map[cell_y][cell_x] != 0:  # Skip walls
-                continue
-                
-            # Convert to world coordinates
-            x = cell_x * CELL_SIZE + CELL_SIZE // 2
-            y = cell_y * CELL_SIZE + CELL_SIZE // 2
-            
-            # Check distance from player
-            dx = x - player_x
-            dy = y - player_y
-            distance = math.sqrt(dx * dx + dy * dy)
-            
-            if distance < MIN_SPAWN_DISTANCE:
-                continue
-                
-            # Check distance from other monsters
-            if self._is_too_close_to_other_monsters(x, y):
-                continue
-                
-            # Create and add monster
-            monster_type = 'normal' if random.random() < 0.8 else 'elite'
-            monster = Monster(x, y, monster_type, self.current_level)
-            self.monsters.append(monster)
-            break
-
-    def _spawn_wave(self, player_x, player_y):
-        """Spawn a wave of monsters"""
-        # Spawn regular monsters
-        for _ in range(WAVE_SIZE - 1):
-            self._try_spawn_monster(player_x, player_y)
-            
-        # Try to spawn boss if not already spawned
-        if not self.boss_spawned and self.current_level > 1:
-            self._try_spawn_boss(player_x, player_y)
-
-    def _try_spawn_boss(self, player_x, player_y):
-        """Attempt to spawn a boss monster"""
-        for _ in range(MAX_SPAWN_ATTEMPTS):
-            # Get random position
-            cell_x = random.randint(1, len(self.current_map[0]) - 2)
-            cell_y = random.randint(1, len(self.current_map) - 2)
-            
-            if self.current_map[cell_y][cell_x] != 0:  # Skip walls
-                continue
-                
-            # Convert to world coordinates
-            x = cell_x * CELL_SIZE + CELL_SIZE // 2
-            y = cell_y * CELL_SIZE + CELL_SIZE // 2
-            
-            # Check distance from player
-            dx = x - player_x
-            dy = y - player_y
-            distance = math.sqrt(dx * dx + dy * dy)
-            
-            if distance < MIN_SPAWN_DISTANCE * 2:  # Boss needs more space
-                continue
-                
-            # Check distance from other monsters
-            if self._is_too_close_to_other_monsters(x, y):
-                continue
-                
-            # Create and add boss
-            boss = Monster(x, y, 'boss', self.current_level)
-            self.monsters.append(boss)
-            self.boss_spawned = True
-            break
-
-    def _is_too_close_to_other_monsters(self, x, y):
-        """Check if a position is too close to other monsters"""
-        for monster in self.monsters:
-            dx = monster.x - x
-            dy = monster.y - y
-            distance = math.sqrt(dx * dx + dy * dy)
-            if distance < MIN_SPAWN_DISTANCE:
-                return True
-        return False
-
     def update(self, dt, player):
         """Update game state"""
         # Update visited cells
         self.update_visited_cells(player['x'], player['y'])
         
-        # Spawn monsters
-        self.spawn_monsters(player['x'], player['y'])
-        
-        # Update monsters
-        for monster in self.monsters[:]:
-            monster.update(dt, player, self.current_map)
-            
-            # Check for player damage
-            dx = monster.x - player['x']
-            dy = monster.y - player['y']
-            distance = math.sqrt(dx * dx + dy * dy)
-            
-            if distance < monster.attack_range and monster.attack_cooldown <= 0:
-                if monster.attack(player):
-                    player['health'] -= monster.damage
-                    if player['health'] <= 0:
-                        return False
-        
-        # Update heart manager
+        # Update managers
+        if self.monster_manager:
+            if not self.monster_manager.update(dt, player):
+                return False
+                
         if self.heart_manager:
             self.heart_manager.update()
-            if self.heart_manager.check_collision(player['x'], player['y']):
-                player['health'] = min(10, player['health'] + HEART_HEAL_AMOUNT)
+        
+        # Check if level is completed
+        if self.check_level_completion():
+            self.level_completed = True
         
         return True
 
     def draw(self, screen, player_x, player_y):
         """Draw game elements"""
-        # Draw monsters
-        for monster in self.monsters:
-            monster.draw(screen, player_x, player_y)
+        if self.monster_manager:
+            self.monster_manager.draw(screen, player_x, player_y)
         
-        # Draw hearts
         if self.heart_manager:
             self.heart_manager.draw(screen)
 
@@ -207,22 +98,52 @@ class MapManager:
             cell_value = self.current_map[cell_y][cell_x]
             
             if cell_value == SPECIAL_AREAS['treasure']:
-                # Spawn extra hearts
                 if self.heart_manager:
                     self.heart_manager.spawn_hearts()
             
             elif cell_value == SPECIAL_AREAS['trap']:
-                # Spawn extra monsters
-                for _ in range(3):
-                    self._try_spawn_monster(x, y)
+                if self.monster_manager:
+                    self.monster_manager.spawn_wave()
             
             elif cell_value == SPECIAL_AREAS['boss']:
-                # Spawn boss if not already spawned
-                if not self.boss_spawned:
-                    self._try_spawn_boss(x, y)
+                if self.monster_manager:
+                    self.monster_manager.spawn_boss()
             
             elif cell_value == SPECIAL_AREAS['exit']:
-                # Advance to next level
                 return self.next_level()
         
-        return False 
+        return False
+
+    def check_level_completion(self):
+        """Check if level is completed"""
+        # Check if time limit is reached
+        if time.time() - self.level_start_time > self.level_time_limit:
+            return True
+            
+        # Check if all monsters are defeated
+        if self.monster_manager and len(self.monster_manager.monsters) == 0:
+            return True
+            
+        return False
+
+    def take_damage(self, amount):
+        """Handle player taking damage"""
+        current_time = time.time()
+        if current_time - self.last_hit_time >= self.invulnerability_time:
+            self.player_health -= amount
+            self.last_hit_time = current_time
+            return True
+        return False
+
+    def add_kill(self):
+        """Increment kill count"""
+        self.kill_count += 1
+
+    def get_level_info(self):
+        """Get current level information"""
+        return {
+            'level': self.current_level,
+            'time_remaining': max(0, self.level_time_limit - (time.time() - self.level_start_time)),
+            'kills': self.kill_count,
+            'health': self.player_health
+        } 
