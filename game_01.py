@@ -4,6 +4,7 @@ import os
 import random
 import time
 import sys
+from src.ui.ui_manager import UIManager  # Add this import
 
 # Set SDL to use the macOS Cocoa video driver before any pygame initialization
 os.environ['SDL_VIDEODRIVER'] = 'cocoa'
@@ -233,6 +234,18 @@ WALL_TEXTURES = [
     [1, 0, 1, 0, 0, 1, 0, 1],
     [1, 0, 0, 0, 0, 0, 0, 1],
     [1, 0, 1, 0, 0, 1, 0, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1]
+]
+
+# Add after the WALL_TEXTURES definition
+DOOR_TEXTURE = [
+    [1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 1, 1, 1, 1, 0, 1],
+    [1, 0, 1, 0, 0, 1, 0, 1],
+    [1, 0, 1, 0, 0, 1, 0, 1],
+    [1, 0, 1, 1, 1, 1, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 1],
     [1, 1, 1, 1, 1, 1, 1, 1]
 ]
 
@@ -811,6 +824,54 @@ def draw_blood_overlay():
         blood_surface.fill(blood_color)
         screen.blit(blood_surface, (0, 0))
 
+def draw_exit_indicator():
+    # Find the exit position
+    exit_pos = None
+    for i in range(len(MAP)):
+        for j in range(len(MAP[0])):
+            if MAP[i][j] == SPECIAL_AREAS['exit']:
+                exit_pos = (i * CELL_SIZE + CELL_SIZE//2, j * CELL_SIZE + CELL_SIZE//2)
+                break
+        if exit_pos:
+            break
+    
+    if exit_pos:
+        # Calculate distance and angle to exit
+        dx = exit_pos[0] - player_x
+        dy = exit_pos[1] - player_y
+        distance = math.sqrt(dx*dx + dy*dy)
+        angle = math.atan2(dy, dx)
+        
+        # Calculate relative angle
+        relative_angle = angle - player_angle
+        if relative_angle < -math.pi:
+            relative_angle += 2 * math.pi
+        elif relative_angle > math.pi:
+            relative_angle -= 2 * math.pi
+        
+        # Only show indicator if exit is in front of player
+        if abs(relative_angle) < FOV/2:
+            # Calculate screen position
+            screen_x = int((0.5 + relative_angle / FOV) * WIDTH)
+            
+            # Draw exit indicator
+            indicator_size = max(20, min(50, 1000/distance))
+            indicator_color = (0, 255, 0) if distance < 200 else (255, 255, 0)
+            
+            # Draw arrow pointing to exit
+            points = [
+                (screen_x, HEIGHT - 50),
+                (screen_x - 10, HEIGHT - 40),
+                (screen_x + 10, HEIGHT - 40)
+            ]
+            pygame.draw.polygon(screen, indicator_color, points)
+            
+            # Draw distance text
+            font = pygame.font.Font(None, 24)
+            text = font.render(f"Exit: {int(distance)}", True, indicator_color)
+            text_rect = text.get_rect(center=(screen_x, HEIGHT - 30))
+            screen.blit(text, text_rect)
+
 def cast_rays():
     # Draw sky and floor with gradient effect
     for y in range(HEIGHT):
@@ -835,6 +896,7 @@ def cast_rays():
         wall_color = WALL_COLOR
         wall_highlight = WALL_HIGHLIGHT
         wall_shadow = WALL_SHADOW
+        is_door = False
         
         while not hit_wall and ray_length < MAX_DEPTH:
             ray_length += 1
@@ -860,6 +922,21 @@ def cast_rays():
                     wall_color = WALL_SHADOW
                 else:
                     wall_color = WALL_COLOR
+            elif MAP[map_x][map_y] == SPECIAL_AREAS['exit']:
+                hit_wall = True
+                is_door = True
+                # Get texture coordinates
+                hit_x = ray_x % CELL_SIZE
+                hit_y = ray_y % CELL_SIZE
+                
+                # Determine door texture based on hit position
+                texture_x = int(hit_x / CELL_SIZE * 8)
+                texture_y = int(hit_y / CELL_SIZE * 8)
+                
+                if DOOR_TEXTURE[texture_x][texture_y] == 1:
+                    wall_color = (100, 100, 255)  # Blue door frame
+                else:
+                    wall_color = (200, 200, 255)  # Light blue door
         
         depth_buffer[i] = ray_length
         
@@ -1210,6 +1287,9 @@ def draw_level_info():
     screen.blit(level_text, (20, 60))
     screen.blit(time_text, (20, 100))
 
+# After the MAP initialization, add:
+ui_manager = UIManager(MAP)
+
 def main():
     global game_state, current_level, level_completed, player_health, player_speed, ability_cooldowns
     
@@ -1301,6 +1381,7 @@ def main():
                 pygame.event.set_grab(False)
             
             cast_rays()
+            draw_exit_indicator()
             draw_weapon(is_shooting, shoot_frame)
             draw_player_health()
             draw_kill_counter()
@@ -1334,6 +1415,18 @@ def main():
             draw_game_over()
         elif game_state == GameState.UPGRADE:
             draw_upgrade_menu()
+        
+        # Update UI
+        ui_manager.update({
+            'level': current_level,
+            'health': player_health,
+            'kill_count': kill_count,
+            'position': (player_x, player_y),
+            'angle': player_angle
+        }, monsters)
+        
+        # Draw UI
+        ui_manager.draw(screen)
         
         pygame.display.flip()
         clock.tick(60)
