@@ -19,6 +19,48 @@ WEAPON_SCALE = 0.5
 MAX_SHOOT_FRAMES = 3  # Reduced from 5 to 3 for faster shooting
 SHOOT_COOLDOWN = 0.1  # Reduced from 0.2 to 0.1 for 10 shots per second
 
+# Game maps
+MAPS = [
+    # Level 1
+    [
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        [1, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1],
+        [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+        [1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        [1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1],
+        [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+        [1, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        [1, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1],
+        [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+        [1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    ],
+    # Level 2
+    [
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
+        [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+        [1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1],
+        [1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1],
+        [1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1],
+        [1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1],
+        [1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1],
+        [1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1],
+        [1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1],
+        [1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1],
+        [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+        [1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
+        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    ]
+]
+
 # Colors
 SKY_COLOR = (20, 20, 30)  # Darker blue for dungeon atmosphere
 FLOOR_COLOR = (40, 35, 30)  # Dark brown for dungeon floor
@@ -213,17 +255,67 @@ MINIMAP_MONSTER_COLORS = {
 MAP_WIDTH = 16  # Number of cells wide
 MAP_HEIGHT = 16  # Number of cells tall
 
-# Monster spawn settings
-MIN_SPAWN_DISTANCE = 200  # Minimum distance from player for monster spawns
+# Monster spawning settings
 MAX_MONSTERS_PER_LEVEL = {
-    1: 5,   # Level 1: 5 monsters
-    2: 8,   # Level 2: 8 monsters
-    3: 12,  # Level 3: 12 monsters
-    4: 15,  # Level 4: 15 monsters
-    5: 20   # Level 5: 20 monsters
+    1: 15,  # Level 1: 15 monsters total
+    2: 20,  # Level 2: 20 monsters total
+    3: 25,  # Level 3: 25 monsters total
+    4: 30,  # Level 4: 30 monsters total
+    5: 40   # Level 5: 40 monsters total (including boss)
 }
 
-# Monster spawn intervals
-SPAWN_INTERVAL = 5.0  # Seconds between monster spawns
-WAVE_INTERVAL = 30.0  # Seconds between monster waves
-WAVE_SIZE = 3  # Number of monsters in each wave 
+SPAWN_INTERVAL = 5.0  # Time between regular monster spawns
+WAVE_INTERVAL = 30.0  # Time between monster waves
+WAVE_SIZE = 3  # Number of monsters per wave
+MAX_SPAWN_ATTEMPTS = 50  # Maximum attempts to find valid spawn position
+
+# Monster attributes
+MONSTER_SPEED = {
+    'normal': 3.0,
+    'elite': 4.0,
+    'boss': 2.5
+}
+
+MONSTER_DAMAGE = {
+    'normal': 10,
+    'elite': 15,
+    'boss': 25
+}
+
+MONSTER_ATTACK_RANGE = {
+    'normal': 40,
+    'elite': 50,
+    'boss': 60
+}
+
+MONSTER_DETECTION_RANGE = {
+    'normal': 200,
+    'elite': 250,
+    'boss': 300
+}
+
+MONSTER_SIZE = {
+    'normal': 15,
+    'elite': 20,
+    'boss': 30
+}
+
+MONSTER_COLORS = {
+    'normal': (255, 0, 0),
+    'elite': (255, 128, 0),
+    'boss': (255, 0, 128)
+}
+
+MONSTER_ATTACK_COOLDOWN = 1.0  # Time between monster attacks
+BOSS_SPECIAL_ABILITY_DURATION = 5.0  # Duration of boss special ability
+BOSS_SPECIAL_ABILITY_COOLDOWN = 15.0  # Time between boss special abilities
+
+# Heart settings
+HEART_SIZE = 32  # Size of heart image in pixels
+MAX_HEARTS = 5  # Maximum number of hearts in the level
+MIN_HEART_DISTANCE = 100  # Minimum distance between hearts
+MAX_HEART_SPAWN_ATTEMPTS = 50  # Maximum attempts to find valid heart positions
+HEART_COLLISION_DISTANCE = 20  # Distance for heart collection
+HEART_HEAL_AMOUNT = 20  # Amount of health restored by collecting a heart
+
+# ... existing code ... 
